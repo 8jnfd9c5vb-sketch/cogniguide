@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CogniGuide Poster</title>
+<style>
+  @page { size: 1000px 1414px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #17171a; --muted: #5d5c63; --line: #e4e2dc; --paper: #f6f5f2;
+    --accent: #2f5bea; --accent2: #0f9d76; --accent3: #e2742b; --accent4: #8a4fd8;
+  }
+  html, body { width: 1000px; height: 1414px; }
+  body {
+    font-family: "Inter", "SF Pro Display", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); background: var(--paper); overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .poster { width: 1000px; height: 1414px; display: flex; flex-direction: column; }
+
+  /* Header */
+  header {
+    flex: none; background: var(--ink); color: #fff; padding: 26px 48px 22px;
+    display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end;
+    position: relative; overflow: hidden;
+  }
+  header::after {
+    content: ""; position: absolute; right: -120px; top: -160px; width: 420px; height: 420px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(47,91,234,.55), rgba(47,91,234,0) 70%);
+  }
+  .eyebrow { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: #9fb4ff; font-weight: 600; }
+  h1 { font-size: 62px; line-height: 1; letter-spacing: -.035em; margin: 8px 0 10px; font-weight: 800; }
+  .tagline { font-size: 18px; color: #d8d8de; max-width: 700px; line-height: 1.35; }
+  .meta { text-align: right; font-size: 14px; color: #c9c9d1; line-height: 1.7; position: relative; z-index: 1; }
+  .meta b { color: #fff; font-size: 17px; display: block; }
+  .meta .url { color: #9fb4ff; font-weight: 600; }
+
+  main { flex: 1; padding: 20px 48px 18px; display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+    font-weight: 700; margin-bottom: 9px; display: flex; align-items: center; gap: 10px;
+  }
+  h2::before { content: ""; width: 18px; height: 3px; background: var(--accent); border-radius: 2px; }
+
+  /* Intro row */
+  .intro { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 15px 18px; }
+  .lead { font-size: 14.5px; line-height: 1.55; color: #2b2b30; }
+  .lead strong { color: var(--ink); }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .compare div { border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.4; }
+  .compare .bad { background: #f3f2ef; color: var(--muted); }
+  .compare .good { background: #eaf0ff; color: #1f3fae; }
+  .compare b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .principles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pr { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 13px; }
+  .pr .t { font-weight: 700; font-size: 14.5px; margin-bottom: 3px; display: flex; gap: 8px; align-items: center; }
+  .pr .d { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  /* Pipeline */
+  .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; position: relative; }
+  .step { position: relative; padding: 0 7px; }
+  .step .box {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 12px 11px;
+    height: 100%; border-top: 4px solid var(--c);
+  }
+  .step .n { font-size: 11px; font-weight: 800; color: var(--c); letter-spacing: .1em; }
+  .step .t { font-size: 15.5px; font-weight: 750; margin: 2px 0 5px; letter-spacing: -.01em; }
+  .step .d { font-size: 11.5px; color: var(--muted); line-height: 1.42; }
+  .step .m { margin-top: 6px; font-size: 11px; font-family: "SF Mono", Menlo, monospace; color: var(--c);
+    background: color-mix(in srgb, var(--c) 10%, white); padding: 3px 7px; border-radius: 6px; display: inline-block; }
+  .step:not(:last-child)::after {
+    content: "›"; position: absolute; right: -8px; top: 38%; font-size: 26px; color: #b4b2ab; z-index: 2;
+    background: var(--paper); width: 16px; text-align: center; line-height: 1;
+  }
+  .loop {
+    margin: 8px 7px 0; border: 1.5px dashed #c9c6be; border-radius: 12px; padding: 8px 14px;
+    font-size: 12.5px; color: var(--muted); display: flex; gap: 10px; align-items: center;
+  }
+  .loop b { color: var(--accent3); }
+
+  /* Architecture */
+  .arch { display: grid; grid-template-columns: 0.85fr 1.1fr 0.95fr 1.3fr; gap: 12px; align-items: stretch; }
+  .layer { border-radius: 14px; padding: 12px 14px; border: 1px solid var(--line); background: #fff; }
+  .layer .lt { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c); }
+  .layer .ln { font-size: 16px; font-weight: 750; margin: 2px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; background: #f3f2ef; color: #3a3a40; white-space: nowrap; }
+  .chip.code { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; }
+  .layer .note { font-size: 11.5px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+  .cloud { background: var(--ink); color: #fff; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .cloud .lt { color: #9fb4ff; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .cloud .h { font-weight: 750; font-size: 14.5px; }
+  .cloud .h small { display: block; color: #a9a9b3; font-weight: 500; font-size: 11.5px; }
+  .mgrid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 6px; align-items: center; font-size: 10.5px; }
+  .mgrid .mh { font-size: 10px; font-weight: 700; color: #9fb4ff; }
+  .mgrid .mh:last-child { color: #7fe0c4; }
+  .mgrid .mr { color: #a9a9b3; font-size: 10.5px; }
+  .mgrid b { font-family: "SF Mono", Menlo, monospace; font-weight: 600; font-size: 10px; color: #fff; background: rgba(255,255,255,.08); border-radius: 6px; padding: 4px 5px; white-space: nowrap; }
+  .mnote { font-size: 10.5px; color: #a9a9b3; line-height: 1.4; }
+  .step .m.cl, .step .m.lo { font-size: 9.5px; white-space: nowrap; padding: 3px 6px; margin-top: 4px; display: block; width: fit-content; }
+  .step .m.cl::before, .step .m.lo::before { font-family: -apple-system, "Helvetica Neue", sans-serif; font-size: 9px; font-weight: 800; letter-spacing: .06em; margin-right: 4px; opacity: .75; }
+  .step .m.cl::before { content: "CLOUD"; }
+  .step .m.lo::before { content: "LOCAL"; }
+  .step .m.lo { color: var(--accent2); background: color-mix(in srgb, var(--accent2) 10%, white); }
+  .model { background: rgba(255,255,255,.08); border-radius: 9px; padding: 5px 9px; font-size: 11.5px; color: #cfd0d8; }
+  .model b { display: block; color: #fff; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+
+  /* Screens */
+  .screens { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  figure { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  figure .img { height: 146px; overflow: hidden; border-bottom: 1px solid var(--line); }
+  figure img { width: 100%; display: block; }
+  figcaption { font-size: 12px; color: var(--muted); padding: 8px 11px; line-height: 1.35; }
+  figcaption b { color: var(--ink); }
+
+  /* Footer */
+  footer {
+    flex: none; margin-top: auto; background: #fff; border-top: 1px solid var(--line);
+    padding: 14px 48px; display: grid; grid-template-columns: 1fr 1.35fr auto; gap: 24px; align-items: center;
+  }
+  .qrblock { display: flex; gap: 14px; align-items: center; }
+  footer .qr { flex: none; }
+  .qrblock .gh .v { font-size: 13px; }
+  footer .qr { width: 104px; height: 104px; border: 1px solid var(--line); border-radius: 10px; padding: 4px; background: #fff; }
+  footer .qr img { width: 100%; height: 100%; display: block; }
+  .gh .k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .gh .v { font-family: "SF Mono", Menlo, monospace; font-size: 16px; font-weight: 600; margin: 4px 0 8px; }
+  .gh .s { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .authors { text-align: right; }
+  .authors .k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .authors .v { font-size: 20px; font-weight: 750; margin-top: 4px; line-height: 1.3; }
+  .authors .s { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="poster">
+  <header>
+    <div>
+      <div class="eyebrow">AI Study Companion · Retrieval Practice</div>
+      <h1>CogniGuide</h1>
+      <p class="tagline">Upload your notes. Get questions written from them. Answer, get graded against your own material, and keep reviewing what you missed.</p>
+    </div>
+    <div class="meta">
+      <b>Zachary Zhang · Hugo Wong</b>
+      Live demo<br><span class="url">cogniguide.probot.hk</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div>
+        <h2>Why CogniGuide</h2>
+        <div class="card">
+          <p class="lead">Re-reading notes feels productive but builds little memory; <strong>testing yourself</strong> (active recall) works far better. CogniGuide turns handwritten or digital notes into short-answer quizzes, so every session becomes self-testing on <strong>your own material</strong>.</p>
+          <div class="compare">
+            <div class="bad"><b>Passive re-reading</b>Familiarity feels like understanding; gaps stay hidden.</div>
+            <div class="good"><b>Active recall with CogniGuide</b>Scores and feedback reveal what you have not mastered.</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h2>Design principles</h2>
+        <div class="principles">
+          <div class="pr"><div class="t"><span class="dot" style="background:var(--accent)"></span>Grounded in your notes</div><div class="d">RAG: questions and grading are based on the original note chunks.</div></div>
+          <div class="pr"><div class="t"><span class="dot" style="background:var(--accent2)"></span>Level-aware</div><div class="d">Hong Kong levels S1–S6; questions and grading adapt to the level.</div></div>
+          <div class="pr"><div class="t"><span class="dot" style="background:var(--accent3)"></span>Learn from mistakes</div><div class="d">Scores below 60 are logged and reviewed until mastered.</div></div>
+          <div class="pr"><div class="t"><span class="dot" style="background:var(--accent4)"></span>Cloud or fully local</div><div class="d">Runs on your own machine, no login. Use Bailian cloud models, or Ollama so notes never leave it.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>How it works: from notes to mastery</h2>
+      <div class="pipeline">
+        <div class="step" style="--c:var(--accent)"><div class="box">
+          <div class="n">01 · UPLOAD</div><div class="t">Add notes</div>
+          <div class="d">PDFs or photos of handwritten notes, sorted into subject folders and processed in the background.</div>
+          <div class="m">PDF · PNG · JPG · WEBP</div></div></div>
+        <div class="step" style="--c:#2a8bd8"><div class="box">
+          <div class="n">02 · TRANSCRIBE</div><div class="t">Image → text</div>
+          <div class="d">Each page is rendered to an image; a vision model transcribes text and math into Markdown + LaTeX.</div>
+          <div class="m cl">qwen3-vl-plus</div><div class="m lo">qwen2.5vl:3b</div></div></div>
+        <div class="step" style="--c:var(--accent2)"><div class="box">
+          <div class="n">03 · INDEX</div><div class="t">Chunk &amp; embed</div>
+          <div class="d">Text is split into ~800-character overlapping chunks, embedded and stored in LanceDB for semantic search.</div>
+          <div class="m cl">text-embedding-v4</div><div class="m lo">bge-m3</div></div></div>
+        <div class="step" style="--c:var(--accent4)"><div class="box">
+          <div class="n">04 · GENERATE</div><div class="t">Write questions</div>
+          <div class="d">An LLM writes five short-answer questions per material, tuned to the student's level.</div>
+          <div class="m cl">qwen-plus</div><div class="m lo">qwen3:4b-instruct</div></div></div>
+        <div class="step" style="--c:var(--accent3)"><div class="box">
+          <div class="n">05 · GRADE</div><div class="t">Score &amp; feedback</div>
+          <div class="d">Answers are scored 0–100 against the source notes, with correct points, missed points and feedback.</div>
+          <div class="m cl">qwen-plus</div><div class="m lo">qwen3:4b-instruct</div></div></div>
+      </div>
+      <div class="loop">↺ <span><b>Feedback loop:</b> any answer scoring below 60 is saved to the Mistakes log → review rounds of five → a later score of 60 or more marks it <b>mastered</b>. Quick Quiz mixes questions from all subjects, optionally focused on a topic via semantic search.</span></div>
+    </section>
+
+    <section>
+      <h2>System architecture</h2>
+      <div class="arch">
+        <div class="layer" style="--c:var(--accent)">
+          <div class="lt">Frontend</div><div class="ln">Next.js 16 · React 19</div>
+          <div class="chips"><span class="chip">Subjects</span><span class="chip">Practice</span><span class="chip">Quick Quiz</span><span class="chip">Mistakes</span><span class="chip">Search</span><span class="chip">Level picker</span><span class="chip">KaTeX</span></div>
+          
+        </div>
+        <div class="layer" style="--c:var(--accent2)">
+          <div class="lt">API &amp; Services</div><div class="ln">Next.js route handlers</div>
+          <div class="chips"><span class="chip code">/api/grade</span><span class="chip code">/api/search</span><span class="chip code">/api/quick-quiz</span><span class="chip code">/api/mistakes</span></div>
+          <div class="note"><b>jobs</b> queue · <b>extract</b> · <b>rag</b> · <b>quiz</b></div>
+        </div>
+        <div class="layer" style="--c:var(--accent3)">
+          <div class="lt">Storage</div><div class="ln">Local data directory</div>
+          <div class="chips"><span class="chip">LanceDB vectors</span><span class="chip">extract.md</span><span class="chip">questions-&lt;level&gt;.json</span><span class="chip">attempts</span><span class="chip">mistakes</span></div>
+          <div class="note">Transcripts and questions are cached.</div>
+        </div>
+        <div class="cloud">
+          <div class="lt">AI Models · switchable</div><div class="h">MODEL_PROFILE = cloud | local<small>Same OpenAI-compatible API for both</small></div>
+          <div class="mgrid">
+            <span></span><span class="mh">☁ Cloud · Bailian</span><span class="mh">⌂ Local · Ollama</span>
+            <span class="mr">Vision</span><b>qwen3-vl-plus</b><b>qwen2.5vl:3b</b>
+            <span class="mr">Embed</span><b>text-embedding-v4</b><b>bge-m3</b>
+            <span class="mr">Chat</span><b>qwen-plus</b><b>qwen3:4b-instruct</b>
+          </div>
+          <div class="mnote">Local: ~6.4 GB of models, works fully offline. Switching profiles needs one index rebuild.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>The app in action</h2>
+      <div class="screens">
+        <figure><div class="img"><img src="crop_home.png"></div><figcaption><b>Home.</b> Quick Quiz, semantic note search and subject folders with indexed chunks.</figcaption></figure>
+        <figure><div class="img"><img src="crop_math.png"></div><figcaption><b>Subject page.</b> Upload notes, track processing status and start a five-question quiz.</figcaption></figure>
+        <figure><div class="img"><img src="crop_material.png"></div><figcaption><b>Practice.</b> Questions generated from a handwritten math note, rendered with LaTeX.</figcaption></figure>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="qrblock">
+      <div class="qr"><img src="qr_youtube.png" alt="QR code to the demo video on YouTube"></div>
+      <div class="gh">
+        <div class="k">Demo video on YouTube</div>
+        <div class="s">Scan to watch the walkthrough: each member presents the code they built.</div>
+      </div>
+    </div>
+    <div class="qrblock">
+      <div class="qr"><img src="qr_github.png" alt="QR code to the GitHub repository"></div>
+      <div class="gh">
+        <div class="k">Source code on GitHub</div>
+        <div class="v">github.com/8jnfd9c5vb-sketch/cogniguide</div>
+        <div class="s">Runs on Windows, macOS and Ubuntu with Node.js 22, using Bailian cloud models or local Ollama models.</div>
+      </div>
+    </div>
+    <div class="authors">
+      <div class="k">Authors</div>
+      <div class="v">Zachary Zhang<br>Hugo Wong</div>
+      <div class="s">cogniguide.probot.hk</div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>

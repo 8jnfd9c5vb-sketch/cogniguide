@@ -8,12 +8,6 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import sync_playwright
-from pptx import Presentation
-from pptx.util import Mm
-
-PPTX_NAME = "Group6_Poster.pptx"
-A0_W, A0_H = 841, 1189   # mm
-MARGIN = 15              # mm, requirement is at least 10 mm
 
 
 def youtube_qr(url):
@@ -41,13 +35,5 @@ with sync_playwright() as p:
     pg.pdf(path="CogniGuide_Poster.pdf", width="1000px", height="1414px", print_background=True)
     b.close()
 
-w, h = Image.open("CogniGuide_Poster.png").size
-prs = Presentation()
-prs.slide_width, prs.slide_height = Mm(A0_W), Mm(A0_H)
-slide = prs.slides.add_slide(prs.slide_layouts[6])
-pic_w = A0_W - 2 * MARGIN
-pic_h = pic_w * h / w
-assert pic_h <= A0_H - 2 * MARGIN
-slide.shapes.add_picture("CogniGuide_Poster.png", Mm(MARGIN), Mm((A0_H - pic_h) / 2), Mm(pic_w), Mm(pic_h))
-prs.save(PPTX_NAME)
-print(f"{PPTX_NAME}: A0 {A0_W}x{A0_H} mm, picture {pic_w:.0f}x{pic_h:.1f} mm, side margin {MARGIN} mm, top/bottom {(A0_H - pic_h) / 2:.1f} mm")
+import build_pptx
+build_pptx.build()

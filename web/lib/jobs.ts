@@ -1,6 +1,6 @@
 import { ExtractionError, extractText } from "./extract";
 import { DEFAULT_LEVEL, type Level } from "./levels";
-import { generateQuestions, spreadChunks } from "./quiz";
+import { generateQuestions, usableChunks } from "./quiz";
 import { chunkExtract, deleteMaterialVectors, indexChunks, materialChunks, resetIndex } from "./rag";
 import {
   getMaterial,
@@ -93,7 +93,7 @@ async function processMaterial({ subject, id }: Job): Promise<void> {
     if (!questions.length) {
       await step({ step: "Writing questions" });
       questions = await generateQuestions(
-        spreadChunks(chunks, CHUNKS_FOR_QUESTIONS),
+        usableChunks(chunks, CHUNKS_FOR_QUESTIONS),
         QUESTIONS_PER_MATERIAL,
         subjectInfo.quizLanguage,
         DEFAULT_LEVEL,
@@ -140,12 +140,18 @@ export async function ensureQuestions(subject: string, id: string, level: Level)
       const chunks = await materialChunks(id);
       if (!subjectInfo || !chunks.length) return [];
       const questions = await generateQuestions(
-        spreadChunks(chunks, CHUNKS_FOR_QUESTIONS),
+        usableChunks(chunks, CHUNKS_FOR_QUESTIONS),
         QUESTIONS_PER_MATERIAL,
         subjectInfo.quizLanguage,
         level,
       );
-      if (await getMaterial(subject, id)) await saveQuestions(subject, id, level, questions);
+      if (await getMaterial(subject, id)) {
+        await saveQuestions(subject, id, level, questions);
+        // The panel prints the default level's set, so another level must not overwrite that count.
+        if (level === DEFAULT_LEVEL) {
+          await updateMaterial(subject, id, { questionCount: questions.length });
+        }
+      }
       return questions;
     })().finally(() => inflight.delete(key));
     inflight.set(key, pending);
@@ -153,11 +159,19 @@ export async function ensureQuestions(subject: string, id: string, level: Level)
   return pending;
 }
 
-/** Requeues anything that was still processing when the server stopped. */
+/** Requeues interrupted work and repairs counts a previous build left stale. */
 export async function resumePending(): Promise<void> {
   const materials = await listAllMaterials();
   for (const m of materials) {
-    if (m.status === "processing") enqueue(m.subject, m.id);
+    if (m.status === "processing") {
+      enqueue(m.subject, m.id);
+      continue;
+    }
+    if (m.status !== "ready") continue;
+    const cached = await getQuestions(m.subject, m.id, DEFAULT_LEVEL);
+    if (cached.length && cached.length !== m.questionCount) {
+      await updateMaterial(m.subject, m.id, { questionCount: cached.length });
+    }
   }
 }
 

@@ -33,6 +33,16 @@ export async function POST(req: NextRequest) {
     } else {
       questions = await getQuestions(body.subject ?? "", body.materialId ?? "", parseLevel(body.level));
       if (!questions.length) throw new UserError("No questions found for this material.", 404);
+      // The practice page re-reads this cache, so answers keyed by a set that has since been rewritten
+      // would all grade against the wrong question and land in the mistake log as 0.
+      const answered = Object.keys(answers);
+      const known = new Set(questions.map((q) => q.id));
+      if (answered.length && answered.every((id) => !known.has(id))) {
+        throw new UserError(
+          "These questions have been rewritten for this level. Reload the page to answer the new set.",
+          409,
+        );
+      }
       source = { subject: body.subject!, materialId: body.materialId! };
       mode = "practice";
     }

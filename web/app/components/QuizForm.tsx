@@ -82,7 +82,9 @@ export function QuizForm({ target, questions, subjectNames, onGraded }: Props) {
               </div>
               <textarea
                 value={answers[q.id] ?? ""}
-                onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                // A functional update keeps the other answers when two events land in one tick, as they
+                // do when a pasted answer is followed immediately by the submit.
+                onChange={(e) => setAnswers((previous) => ({ ...previous, [q.id]: e.target.value }))}
                 disabled={Boolean(attempt)}
                 rows={4}
                 placeholder={q.language === "zh" ? "在这里作答…" : "Type your answer…"}
@@ -124,7 +126,11 @@ export function QuizForm({ target, questions, subjectNames, onGraded }: Props) {
       ) : (
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            // The reset swaps this node into the submit button before the browser runs the
+            // click's default action, so without preventDefault the retry click re-grades
+            // the now-empty answers and saves a 0/100 attempt.
+            e.preventDefault();
             setAttempt(null);
             setAnswers({});
           }}

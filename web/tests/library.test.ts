@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ids = vi.hoisted(() => ({ n: 0 }));
+const model = vi.hoisted(() => ({ hasKey: true }));
+
+vi.mock("@/lib/bailian", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/bailian")>("@/lib/bailian");
+  return { ...actual, hasApiKey: () => model.hasKey };
+});
 
 vi.mock("@/lib/quiz", () => ({
   generateQuestions: vi.fn(
@@ -70,7 +76,14 @@ import {
 import { chunkCountsBySubject, IndexMismatchError, sampleChunks, search } from "@/lib/rag";
 import { generateKnowledgeQuestions, generateQuestions } from "@/lib/quiz";
 import { PASS_SCORE } from "@/lib/scoring";
-import { getMaterial, getMistake, getQuiz, getSubject, listMistakes } from "@/lib/storage";
+import {
+  createSubject,
+  getMaterial,
+  getMistake,
+  getQuiz,
+  getSubject,
+  listMistakes,
+} from "@/lib/storage";
 import type { GradedItem } from "@/lib/types";
 import { makeChunk, makeQuestion } from "./helpers";
 
@@ -79,6 +92,7 @@ const knowledge = vi.mocked(generateKnowledgeQuestions);
 
 beforeEach(() => {
   ids.n = 0;
+  model.hasKey = true;
   notes.mockClear();
   knowledge.mockClear();
   vi.mocked(search).mockReset();
@@ -113,6 +127,13 @@ describe("uploadMaterial", () => {
     expect(meta).toMatchObject({ subject: "math", kind: "image", status: "processing", fileName: "notes.png" });
     expect(enqueue).toHaveBeenCalledWith("math", meta.id);
     expect(await getMaterial("math", meta.id)).not.toBeNull();
+  });
+
+  it("refuses an upload when no model is configured", async () => {
+    model.hasKey = false;
+    const file = new File([new Uint8Array([1, 2, 3])], "notes.png");
+    await expect(uploadMaterial("math", file)).rejects.toThrow(/DASHSCOPE_API_KEY is not set/);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it("rejects an unknown subject, a bad type, an empty file and an oversized file", async () => {
@@ -222,6 +243,27 @@ describe("quizzes", () => {
     expect(session.kind).toBe("review");
     expect(session.questions.map((q) => q.id)).toEqual(["rev10000", "rev20000", "rev30000", "rev40000", "rev50000"]);
     await expect(buildReviewQuiz("geography")).rejects.toThrow(/no mistakes/);
+  });
+
+  it("keeps a question that points at the notes out of review rounds", async () => {
+    const subject = await createSubject("Review filter");
+    const copied = makeQuestion({
+      id: "copied001",
+      subject: subject.slug,
+      question: "In question 16, $\\sin C \\approx 1.04$. Explain why triangle $ABC$ cannot be formed.",
+    });
+    const fresh = makeQuestion({
+      id: "fresh0001",
+      subject: subject.slug,
+      question: "A triangle has $A = 40^\\circ$, $a = 7$ cm and $c = 12$ cm. Find $C$, or show that it cannot be formed.",
+    });
+    await recordMistakes([copied, fresh], [graded(copied.id, 10), graded(fresh.id, 10)]);
+    expect(await getMistake(copied.id)).not.toBeNull();
+
+    const session = await buildReviewQuiz(subject.slug);
+    expect(session.questions.map((q) => q.id)).toEqual(["fresh0001"]);
+
+    await removeSubject(subject.slug);
   });
 });
 

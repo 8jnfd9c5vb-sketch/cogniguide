@@ -9,9 +9,9 @@ const PAGE_ATTEMPTS = 3;
 
 const TRANSCRIBE_PROMPT = `Transcribe all study content on this page exactly as written, keeping its original language.
 - Use Markdown. Write mathematics in LaTeX: $...$ inline, $$...$$ for display equations.
-- Keep the original order, headings, numbering and line breaks of derivations.
+- Keep the order, item numbering and line breaks of the worked solutions themselves.
 - Ignore watermarks, page numbers, running headers and footers, URLs, Telegram or social media links, and crossed-out text.
-- Do not explain, summarise or add anything, and do not wrap the reply in a code block.
+- Do not explain, summarise or add anything, and do not wrap the reply in a code block. Never comment on the page, the transcription itself or possible typos.
 If the page contains no study content, reply with exactly: [EMPTY]`;
 
 type PdfModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");

@@ -86,4 +86,54 @@ describe("bailian client", () => {
     })).rejects.toThrow(/bad shape/);
     expect(chatCreate).toHaveBeenCalledTimes(2);
   });
+
+  it("tells the model why its reply was rejected, so the retry can fix it", async () => {
+    const copied = '{"questions":[{"question":"In question 16"}]}';
+    chatCreate
+      .mockResolvedValueOnce({ choices: [{ message: { content: copied } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: '{"ok":true}' } }] });
+    const value = await chatJson(
+      "s",
+      "u",
+      (_raw, attempt) => {
+        if (attempt === 0) throw new Error("refers to the notes");
+        return { ok: true };
+      },
+      { feedback: (err) => `Fix this: ${err.message}` },
+    );
+    expect(value).toEqual({ ok: true });
+    const retry = chatCreate.mock.calls[1][0].messages;
+    expect(retry).toHaveLength(4);
+    expect(retry[2]).toEqual({ role: "assistant", content: copied });
+    expect(retry[3].content).toBe("Fix this: refers to the notes");
+  });
+
+  it("quotes the rejection when the caller supplies no feedback function", async () => {
+    chatCreate
+      .mockResolvedValueOnce({ choices: [{ message: { content: '{"a":1}' } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: '{"a":2}' } }] });
+    expect(
+      await chatJson("s", "u", (_raw, attempt) => {
+        if (attempt === 0) throw new Error("no questions array");
+        return { good: true };
+      }),
+    ).toEqual({ good: true });
+    expect(chatCreate.mock.calls[1][0].messages[3].content).toContain(
+      "rejected: no questions array",
+    );
+  });
+
+  it("honours the attempts and maxTokens options without changing the defaults", async () => {
+    chatCreate.mockResolvedValue({ choices: [{ message: { content: "{}" } }] });
+    expect(await chatJson("s", "u", (value) => value)).toEqual({});
+    expect(chatCreate.mock.calls[0][0].max_tokens).toBeUndefined();
+
+    await expect(
+      chatJson("s", "u", () => {
+        throw new Error("still wrong");
+      }, { attempts: 3, maxTokens: 1500 }),
+    ).rejects.toThrow(/still wrong/);
+    expect(chatCreate).toHaveBeenCalledTimes(4);
+    expect(chatCreate.mock.calls[3][0]).toMatchObject({ temperature: 0.2, max_tokens: 1500 });
+  });
 });

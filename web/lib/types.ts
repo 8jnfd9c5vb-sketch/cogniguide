@@ -37,6 +37,11 @@ export interface Question {
   question: string;
   referenceAnswer: string;
   evidence: string;
+  /**
+   * Plain-ASCII equations backing the reference answer, checked locally before the question ships.
+   * Withheld from the student: `PublicQuestion` picks only the fields above.
+   */
+  checks?: string[];
   chunkIds: string[];
   subject: string;
   materialId: string;

@@ -1,10 +1,11 @@
 import path from "node:path";
-import { MissingApiKeyError } from "./bailian";
+import { hasApiKey, MissingApiKeyError } from "./bailian";
 import { config, SUPPORTED_UPLOADS } from "./config";
 import { countPdfPages } from "./extract";
 import { safeFileName, shortId } from "./fsutil";
 import { enqueue } from "./jobs";
 import { DEFAULT_LEVEL, type Level } from "./levels";
+import { pointsAtTheSource } from "./originality";
 import { generateKnowledgeQuestions, generateQuestions } from "./quiz";
 import { PASS_SCORE } from "./scoring";
 import {
@@ -76,6 +77,9 @@ export async function subjectSummaries(): Promise<SubjectSummary[]> {
 export async function uploadMaterial(slug: string, file: File): Promise<MaterialMeta> {
   const subject = await getSubject(slug);
   if (!subject) throw new UserError("Subject not found.", 404);
+  // Transcribing is the first thing the background job does, so an upload without a model source would
+  // be accepted and then fail minutes later.
+  if (!hasApiKey()) throw new MissingApiKeyError();
 
   const ext = path.extname(file.name).toLowerCase();
   const kind = SUPPORTED_UPLOADS[ext];
@@ -200,7 +204,13 @@ const REVIEW_SIZE = 5;
 
 /** Up to five unmastered mistakes, least recently missed first, optionally for one subject. */
 export async function buildReviewQuiz(subject?: string): Promise<QuickQuizSession> {
-  const open = (await listMistakes()).filter((m) => !m.masteredAt && (!subject || m.question.subject === subject));
+  // Questions written as "In question 16..." cannot be re-asked: they point at notes the student has open.
+  const open = (await listMistakes()).filter(
+    (m) =>
+      !m.masteredAt &&
+      (!subject || m.question.subject === subject) &&
+      !pointsAtTheSource(m.question.question),
+  );
   if (!open.length) throw new UserError("There are no mistakes to review.");
   const picked = open.reverse().slice(0, REVIEW_SIZE);
   const session: QuickQuizSession = {

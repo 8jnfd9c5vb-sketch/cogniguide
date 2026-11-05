@@ -156,8 +156,38 @@ describe("questions", () => {
       path.join(paths.material("math", meta.id), "questions.json"),
       JSON.stringify(legacy),
     );
-    expect(await getQuestions("math", meta.id)).toEqual([{ ...legacy[0], level: "s3" }]);
+    // A bare array predates versioning, so those copied sets are treated as stale.
+    expect(await getQuestions("math", meta.id)).toEqual([]);
     expect(await getQuestions("math", meta.id, "s4")).toEqual([]);
+  });
+
+  it("writes the current version and reads it back", async () => {
+    const meta = await material();
+    const questions = [makeQuestion({ id: "versq001" })];
+    await saveQuestions("math", meta.id, "s4", questions);
+    const { readFile } = await import("node:fs/promises");
+    const { paths } = await import("@/lib/config");
+    const path = await import("node:path");
+    const raw = JSON.parse(
+      await readFile(path.join(paths.material("math", meta.id), "questions-s4.json"), "utf8"),
+    );
+    expect(Object.keys(raw)).toEqual(["v", "questions"]);
+    expect(raw.questions).toEqual(questions);
+    expect(await getQuestions("math", meta.id, "s4")).toEqual(questions);
+  });
+
+  it("ignores a file written by another version", async () => {
+    const meta = await material();
+    const { writeFile } = await import("node:fs/promises");
+    const { paths } = await import("@/lib/config");
+    const path = await import("node:path");
+    const file = path.join(paths.material("math", meta.id), "questions-s3.json");
+    await writeFile(file, JSON.stringify({ v: 1, questions: [makeQuestion({ id: "oldsha01" })] }));
+    expect(await getQuestions("math", meta.id)).toEqual([]);
+    await writeFile(file, JSON.stringify({ v: 99, questions: [makeQuestion({ id: "newsh001" })] }));
+    expect(await getQuestions("math", meta.id)).toEqual([]);
+    await writeFile(file, JSON.stringify([makeQuestion({ id: "barearr1" })]));
+    expect(await getQuestions("math", meta.id)).toEqual([]);
   });
 
   it("rejects unsafe ids", async () => {
@@ -179,6 +209,25 @@ describe("quizzes and mistakes", () => {
     await saveQuiz(session);
     expect(await getQuiz(session.id)).toEqual(session);
     expect(await getQuiz("../quiz")).toBeNull();
+  });
+
+  it("drops a day-old session when the next quiz is saved", async () => {
+    const { paths } = await import("@/lib/config");
+    const path = await import("node:path");
+    const { stat, utimes } = await import("node:fs/promises");
+    const stale: QuickQuizSession = {
+      id: "staler01",
+      level: "s3",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      questions: [makeQuestion()],
+    };
+    await saveQuiz(stale);
+    const file = path.join(paths.quizzes(), "staler01.json");
+    const longAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    await utimes(file, longAgo, longAgo);
+    await saveQuiz({ ...stale, id: "freshr01" });
+    await expect(stat(file)).rejects.toThrow();
+    expect(await getQuiz("freshr01")).not.toBeNull();
   });
 
   it("lists mistakes newest first and deletes only safe ids", async () => {

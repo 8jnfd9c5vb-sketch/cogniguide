@@ -115,7 +115,7 @@ EMBEDDING_MODEL=text-embedding-v4
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | 用云端时必填 | 百炼密钥。留空时首页会提示，上传和出题无法进行。profile 可以提供。 |
+| `DASHSCOPE_API_KEY` | 用云端时必填 | 百炼密钥。留空时首页出现琥珀色提示 **"DASHSCOPE_API_KEY is not set."**，上传会被直接拒绝，免得排队到后台才发现无法识别。profile 可以提供。 |
 | `DASHSCOPE_BASE_URL` | 中国站兼容地址 | 与密钥所属区域一致。用本地 Ollama 时是 `http://127.0.0.1:11434/v1`。 |
 | `MODEL_PROFILE` | 空 | 填 `profiles/` 里的文件名（`cloud` 或 `local`），整体切换模型来源。 |
 | `DATA_DIR` | `web/data` | 学科、资料、作答、错题和向量索引的目录。换电脑时拷这个目录即可带走全部学习数据。 |
@@ -345,25 +345,27 @@ systemctl --user disable --now cogniguide
 
 1. 浏览器打开 <http://127.0.0.1:3000>，能看到 Subjects 和 Quick Quiz，页面顶部有 Level，从 S1 · 中一 到 S6 · 中六。
 2. 检查表头下面那一行模型信息：显示当前 profile、接口地址和三个模型名。`MODEL_PROFILE=local` 时应该是 `http://127.0.0.1:11434/v1`、`qwen2.5vl:3b`、`qwen3:4b-instruct-2507-q4_K_M`、`bge-m3`。
-3. 首页不该有红色的 "API key is missing"。如果有，说明 `.env.local` 没填密钥（cloud），或者服务是在保存之前启动的。
-4. **刚切换过 profile 的话**，点首页的 **Rebuild index** 并等它跑完；索引是另一个向量模型建的，重建之前搜索不会工作。
+3. 首页不该有琥珀色的 "DASHSCOPE_API_KEY is not set."。如果有，说明 `.env.local` 没填密钥（cloud），或者服务是在保存之前启动的。用 `MODEL_PROFILE=local` 时，让这条提示消失的是 `web/profiles/local.env` 里的占位密钥。
+4. **刚切换过 profile 的话**，首页会出现一条琥珀色提示，说明索引是另一个向量模型建的。点 **Rebuild index** 并等它跑完；在此之前，搜索、带主题的随堂测验以及新上传资料的向量化都会回答 "The search index was built with ... Rebuild the index from the home page first."。随机随堂测验和 Subject Quiz 仍可正常使用，因为它们随机抽样，不比较向量。
 5. 进入一个学科，上传一张小的 PNG 或一页 PDF，状态会从处理中变成 Ready。云端通常几十秒，`local` 每页要一两分钟。
 6. 打开该资料，答一题并提交：评分能用，搜索也能搜到笔记内容。
 7. 可选：在 `web` 目录执行 `npm test`。测试用临时数据，既不调百炼也不调 Ollama，也不读 `DATA_DIR` 里的真实资料。
 
 ## 6. 工作原理
 
-- 上传后立即返回，后台一次处理一个：PDF 每页渲染成图片识别，文本切块并嵌入 LanceDB，然后出五道题。服务重启时会接着跑被打断的任务；失败的任务可以在学科页 Retry，已经转写成功的页不会重新识别。
+- 上传后立即返回，后台一次处理一个：PDF 每页渲染成图片识别，文本切块并嵌入 LanceDB，然后写出最多五道题。服务重启时，被打断的任务会自己回到队列继续。学科页的 **Retry** 会重新识别整个文件，因为每一页都成功后转写稿才会落盘；资料一旦 Ready，Retry 就沿用已有的转写稿，只重新索引和重新出题。
+- **搜索**：把提问转成向量，返回最接近的切块。余弦距离大于 0.75 的切块视为无关并丢弃，所以笔记里没有答案的问题会返回空，而不是硬凑一个。显示的片段会去掉下面说的工作纸杂项，但索引里存的仍是转写原文。
 - 表头的 **Level** 决定难度，从香港 S1（中一）到 S6（中六），默认 S3，存在浏览器 cookie 里。练习题、随堂测验和评分都按当前 Level。题目按学科 + 资料 + Level 缓存：S3 的题在上传时就写好，其他 Level 第一次练习时现写。
-- 每个学科页有 **Subject Quiz**：从该学科当前 Level 的笔记里随机抽五题。学科还没有资料时，改为按香港课程的一般学科常识出五题，并标注 "General knowledge"。
-- **错题（Mistakes）**：练习、随堂测验或学科测验里低于 60 分的作答都会进错题本。错题页列出你的答案、反馈和参考答案，可以发起一轮五题的复习，也可以只复习一个学科。同一题后来答到 60 分及以上就标记为已掌握，错题也可以手动删除。
+- 出题器写的是新题：只借用笔记里的公式和方法，数字、名称和情境都另拟，所以不会照抄你已做过的题；参考答案是分编号的解题步骤，最后一行给出最终答案。答案里的算术先在本机校验，通不过就不采用；转录文字里与工作纸无关的内容（课程表头、页码、空题号、转录者的旁白）会被忽略。出题时会多要两份草稿（共七题），这样某份答案通不过校验只少一道题，不至于整组作废，最终取通过校验的前五题。题目文件带有版本号，旧版本写的题视为过期，下次打开这份资料对应的 Level 时自动重写——不用重新上传，也不用重建索引。改用 `local` 时，小模型往往写不出能通过校验的算术，因此那里更常退化成只给文字说明的答案。
+- 每个学科页有 **Subject Quiz**：按当前 Level 从该学科的笔记里随机取样，写出五道新题。每一轮都是重新写的，不会复用旧题，因此云端大约要等一分钟，`local` 更久。学科还没有资料时，改为按香港课程的一般学科常识出五题，并标注 "General knowledge"。
+- **错题（Mistakes）**：练习、随堂测验或学科测验里低于 60 分的作答都会进错题本。错题页列出你的答案、反馈和参考答案，可以发起一轮五题的复习，也可以只复习一个学科。仍在直接引用你笔记原文的那道错题会列在页面上，但复习轮会跳过它（出题器不会重考原题），卡片上会说明。同一题后来答到 60 分及以上就标记为已掌握，错题也可以手动删除。删除学科时，由该学科笔记产生的错题记录也一并删除。
 - `DATA_DIR` 里的目录结构：
 
 ```
 subjects/<学科>/subject.json
 subjects/<学科>/materials/<id>/original.*、meta.json、extract.md、questions-<level>.json
 attempts/<id>.json      已评分的作答（练习和随堂测验）
-quizzes/<id>.json       随堂测验、学科测验和复习场次
+quizzes/<id>.json       随堂测验、学科测验和复习场次（隔天未用的场次会在下一次开始测验时删除）
 mistakes/<id>.json      错题本，一题一个文件
 rag/                    LanceDB 索引和 index.json（记录向量模型和维度）
 ```
@@ -372,7 +374,7 @@ rag/                    LanceDB 索引和 index.json（记录向量模型和维�
 
 **端口已被占用。** 另一个 CogniGuide 或别的程序占着 3000，先停掉旧进程再启动。macOS 和 Ubuntu：`lsof -iTCP:3000 -sTCP:LISTEN`。Windows PowerShell：`Get-NetTCPConnection -LocalPort 3000 -State Listen`。
 
-**首页提示缺少 API Key。** `.env.local` 里 `DASHSCOPE_API_KEY` 为空，而且没有 profile 提供密钥；或者服务是在写入密钥之前启动的。保存文件后重启。
+**首页出现 "DASHSCOPE_API_KEY is not set."。** `.env.local` 里 `DASHSCOPE_API_KEY` 为空，而且没有 profile 提供密钥；或者服务是在写入密钥之前启动的。保存文件后重启。用 `MODEL_PROFILE=local` 时这条提示不该出现，因为 `web/profiles/local.env` 提供了占位密钥——如果仍然出现，说明 `MODEL_PROFILE` 是空的，服务只读了 `.env.local`。
 
 **启动时报错提到 `MODEL_PROFILE`。** 值必须和 `web/profiles/` 里的文件名完全一致（`cloud` 或 `local`）。这种情况下服务宁可拒绝启动，也不会悄悄切回另一个来源。
 
@@ -382,7 +384,11 @@ rag/                    LanceDB 索引和 index.json（记录向量模型和维�
 
 **用 `cloud` 时报模型不存在。** `VISION_MODEL` 保持 `qwen3-vl-plus`，`qwen-vl-max` 在当前百炼接口上不可用。密钥区域和 `DASHSCOPE_BASE_URL` 不一致时，也会报模型或鉴权错误。
 
-**上传后一直处理中或失败。** 看该资料上的错误文字。PDF 超过 50 页、文件超过 25 MB、文件加密，或图片里没有可识别的学习内容，都会失败。网络或模型中断之后，在学科页点 Retry；已经转写成功的文本不会重新识别。
+**上传后一直处理中或失败。** 看该资料上的错误文字。PDF 超过 50 页、文件超过 25 MB、文件加密，或图片里没有可识别的学习内容，都会失败。被重启打断的上传会自己回到队列继续。**Retry** 会重新识别每一页，因为整份文件全部成功后转写稿才会保存——也就是说 30 页的 PDF 在第 29 页失败后，重试是从第 1 页重新识别。资料一旦 Ready，Retry 便沿用转写稿，只重建索引和题目。
+
+**"These questions have been rewritten for this level. Reload the page to answer the new set."** 练习页还开着，而这一组题已被重写，按旧的题目 id 提交会全部评到错误的答案上。刷新页面做现在显示的那一组即可；被拒绝的那次作答没有记录。
+
+**"This quiz has expired. Start a new one."** 测验应当在开始的当天完成；超过一天的场次会在下一次开始测验时删除。重新开一轮测验即可。
 
 **换了向量模型后无法搜索。** 这是预期行为。首页会提示重建索引，按 **Rebuild index** 重建即可，转写和题目都沿用。
 

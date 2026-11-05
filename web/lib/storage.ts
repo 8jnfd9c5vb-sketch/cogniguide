@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { paths } from "./config";
 import { readJson, readText, shortId, writeFileAtomic, writeJson } from "./fsutil";
@@ -193,18 +193,38 @@ export async function writeExtract(slug: string, id: string, text: string): Prom
 const questionsFile = (slug: string, id: string, level: Level) =>
   path.join(paths.material(slug, id), `questions-${level}.json`);
 
+/**
+ * Bump when the generation contract changes so every cached set is treated as stale and rewritten
+ * on the next open. Version 1 was a bare array of questions copied from the notes.
+ */
+const QUESTIONS_VERSION = 2;
+
+interface QuestionsFile {
+  v: number;
+  questions: Question[];
+}
+
+/** Anything but the current version — including the old bare-array files — reads as no questions. */
+function parseQuestionsFile(raw: unknown): Question[] {
+  if (!raw || typeof raw !== "object") return [];
+  const file = raw as Partial<QuestionsFile>;
+  return file.v === QUESTIONS_VERSION && Array.isArray(file.questions) ? file.questions : [];
+}
+
 export async function getQuestions(
   slug: string,
   id: string,
   level: Level = DEFAULT_LEVEL,
 ): Promise<Question[]> {
   if (!isValidSlug(slug) || !isValidId(id)) return [];
-  const saved = await readJson<Question[]>(questionsFile(slug, id, level));
-  if (saved) return saved;
+  const saved = parseQuestionsFile(await readJson<unknown>(questionsFile(slug, id, level)));
+  if (saved.length) return saved;
   if (level !== DEFAULT_LEVEL) return [];
   // Materials processed before levels existed stored one set in questions.json.
-  const legacy = await readJson<Question[]>(path.join(paths.material(slug, id), "questions.json"));
-  return (legacy ?? []).map((q) => ({ ...q, level: DEFAULT_LEVEL }));
+  const legacy = parseQuestionsFile(
+    await readJson<unknown>(path.join(paths.material(slug, id), "questions.json")),
+  );
+  return legacy.map((q) => ({ ...q, level: DEFAULT_LEVEL }));
 }
 
 export async function saveQuestions(
@@ -213,13 +233,29 @@ export async function saveQuestions(
   level: Level,
   questions: Question[],
 ): Promise<void> {
-  await writeJson(questionsFile(slug, id, level), questions);
+  const file: QuestionsFile = { v: QUESTIONS_VERSION, questions };
+  await writeJson(questionsFile(slug, id, level), file);
 }
 
 // ---------- quick quiz sessions and attempts ----------
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
 export async function saveQuiz(session: QuickQuizSession): Promise<void> {
   await writeJson(path.join(paths.quizzes(), `${session.id}.json`), session);
+  await expireQuizzes();
+}
+
+/** A quiz tab is one-shot, and the grade route already tells a stale one to start over. */
+async function expireQuizzes(): Promise<void> {
+  const dir = paths.quizzes();
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const cutoff = Date.now() - SESSION_TTL_MS;
+  for (const name of names.filter((n) => n.endsWith(".json"))) {
+    const file = path.join(dir, name);
+    const info = await stat(file).catch(() => null);
+    if (info && info.mtimeMs < cutoff) await rm(file, { force: true });
+  }
 }
 
 export async function getQuiz(id: string): Promise<QuickQuizSession | null> {

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LEVEL_LABELS, DEFAULT_LEVEL } from "@/lib/levels";
+import { pointsAtTheSource } from "@/lib/originality";
 import type { Mistake, PublicQuestion } from "@/lib/types";
 import { api, postJson } from "./api";
 import { MathText } from "./MathText";
@@ -30,6 +31,8 @@ export function MistakesView({ mistakes, subjects }: Props) {
   const inSubject = mistakes.filter((m) => !subject || m.question.subject === subject);
   const open = inSubject.filter((m) => !m.masteredAt);
   const mastered = inSubject.filter((m) => m.masteredAt);
+  // A review round can only re-ask what the server is willing to serve, so the count matches its filter.
+  const reviewable = open.filter((m) => !pointsAtTheSource(m.question.question));
 
   async function startReview() {
     setLoading(true);
@@ -72,13 +75,13 @@ export function MistakesView({ mistakes, subjects }: Props) {
         </select>
         <button
           onClick={startReview}
-          disabled={loading || open.length === 0}
+          disabled={loading || reviewable.length === 0}
           className="rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {loading ? "Preparing…" : review ? "Next review round" : "Review mistakes"}
         </button>
         <span className="text-sm text-stone-500">
-          {open.length} to review · {mastered.length} mastered
+          {reviewable.length} to review · {mastered.length} mastered
         </span>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -102,9 +105,18 @@ export function MistakesView({ mistakes, subjects }: Props) {
         </p>
       ) : (
         <ul className="space-y-3">
-          {open.map((m) => (
-            <MistakeCard key={m.id} mistake={m} subjectName={names[m.question.subject]} onDelete={remove} />
-          ))}
+          {open.map((m) => {
+            const problem = pointsAtTheSource(m.question.question);
+            return (
+              <MistakeCard
+                key={m.id}
+                mistake={m}
+                subjectName={names[m.question.subject]}
+                note={problem ? "This one quotes your own notes, so a review round skips it." : ""}
+                onDelete={remove}
+              />
+            );
+          })}
         </ul>
       )}
 
@@ -129,10 +141,12 @@ export function MistakesView({ mistakes, subjects }: Props) {
 function MistakeCard({
   mistake: m,
   subjectName,
+  note = "",
   onDelete,
 }: {
   mistake: Mistake;
   subjectName?: string;
+  note?: string;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -151,6 +165,7 @@ function MistakeCard({
       <p className="font-medium">
         <MathText text={m.question.question} />
       </p>
+      {note && <p className="mt-1 text-xs text-amber-700">{note}</p>}
       <div className="mt-2 space-y-1 text-stone-700">
         <p>
           <span className="text-stone-500">Your answer: </span>

@@ -18,7 +18,7 @@ vi.mock("@/lib/extract", () => ({
 const ids = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock("@/lib/quiz", () => ({
-  spreadChunks: <T>(chunks: T[], max: number) => chunks.slice(0, max),
+  usableChunks: <T>(chunks: T[], max: number) => chunks.slice(0, max),
   generateQuestions: vi.fn(
     async (
       chunks: Array<{ id: string; subject: string; materialId: string }>,
@@ -44,7 +44,7 @@ vi.mock("@/lib/quiz", () => ({
 import { ExtractionError, extractText } from "@/lib/extract";
 import { ensureQuestions, enqueue, rebuildIndex, resumePending } from "@/lib/jobs";
 import { generateQuestions } from "@/lib/quiz";
-import { createMaterial, getMaterial, getQuestions, listAllMaterials, listSubjects } from "@/lib/storage";
+import { createMaterial, getMaterial, getQuestions, listAllMaterials, listSubjects, updateMaterial } from "@/lib/storage";
 
 const transcript = "## Page 1\n\nA subspace is closed under addition.\n";
 const transcribe = vi.mocked(extractText);
@@ -139,6 +139,15 @@ describe("material processing", () => {
     expect(await getMaterial("geography", meta.id)).toMatchObject({ status: "ready" });
   });
 
+  it("repairs a question count an older build left stale", async () => {
+    const meta = await add("math");
+    enqueue("math", meta.id);
+    await settle();
+    await updateMaterial("math", meta.id, { questionCount: 2 });
+    await resumePending();
+    expect((await getMaterial("math", meta.id))?.questionCount).toBe(5);
+  });
+
   it("reindexes an extracted material without transcribing or rewriting questions", async () => {
     const meta = await add("math");
     enqueue("math", meta.id);
@@ -150,6 +159,29 @@ describe("material processing", () => {
     expect(transcribe).not.toHaveBeenCalled();
     expect(questions).not.toHaveBeenCalled();
     expect(await getMaterial("math", meta.id)).toMatchObject({ status: "ready", chunkCount: 1 });
+  });
+
+  it("keeps the panel count from the default level when another level is generated", async () => {
+    const meta = await add("math");
+    enqueue("math", meta.id);
+    await settle();
+    questions.mockImplementationOnce(async (chunks, _count, language, level) =>
+      [0, 1].map((n) => ({
+        id: `s5_${n}`,
+        question: `Shorter set ${n}`,
+        referenceAnswer: "Answer",
+        evidence: "evidence",
+        chunkIds: [chunks[0].id],
+        subject: "math",
+        materialId: meta.id,
+        language,
+        level,
+        origin: "notes" as const,
+      })),
+    );
+    expect(await ensureQuestions("math", meta.id, "s5")).toHaveLength(2);
+    expect((await getMaterial("math", meta.id))?.questionCount).toBe(5);
+    expect(await getQuestions("math", meta.id, "s5")).toHaveLength(2);
   });
 
   it("generates another level once and shares the in-flight request", async () => {

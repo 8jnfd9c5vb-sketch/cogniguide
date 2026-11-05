@@ -115,7 +115,7 @@ EMBEDDING_MODEL=text-embedding-v4
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DASHSCOPE_API_KEY` | (required for cloud) | Bailian key. When empty the home page warns and upload / question writing are unavailable. A profile can supply it. |
+| `DASHSCOPE_API_KEY` | (required for cloud) | Bailian key. When empty the home page shows an amber **"DASHSCOPE_API_KEY is not set."** banner and uploads are refused, so nothing is queued that could not be transcribed. A profile can supply it. |
 | `DASHSCOPE_BASE_URL` | China endpoint | Must match the key's region. For local Ollama: `http://127.0.0.1:11434/v1`. |
 | `MODEL_PROFILE` | (empty) | Name a file in `web/profiles/` (`cloud` or `local`) to switch every model setting at once. |
 | `DATA_DIR` | `web/data` | Subjects, materials, answers, mistakes and the vector index. Copy this directory to move all study data. |
@@ -345,25 +345,27 @@ After editing `.env.local` or rebuilding, run `systemctl --user restart cognigui
 
 1. Open <http://127.0.0.1:3000>. You should see Subjects and Quick Quiz, and a Level selector in the header running from S1 · 中一 to S6 · 中六.
 2. Check the model line under the header. It shows the active profile, endpoint and the three model names. With `MODEL_PROFILE=local` it must read `http://127.0.0.1:11434/v1`, `qwen2.5vl:3b`, `qwen3:4b-instruct-2507-q4_K_M`, `bge-m3`.
-3. There should be no red "API key is missing". If there is, `.env.local` has no key (cloud) or the service started before you saved it.
-4. **Right after switching profiles**, click **Rebuild index** on the home page and wait for it to finish; search refuses to run against an index built by the other embedding model.
+3. There should be no amber banner reading **"DASHSCOPE_API_KEY is not set."** If there is, `.env.local` has no key (cloud) or the service started before you saved it. With `MODEL_PROFILE=local` the placeholder key in `web/profiles/local.env` is what clears it.
+4. **Right after switching profiles**, the home page shows an amber notice that the index was built with the other embedding model. Click **Rebuild index** and wait for it to finish. Until you do, search, a topic-focused Quick Quiz and the indexing step of a new upload answer *"The search index was built with ... Rebuild the index from the home page first."* A random Quick Quiz and a Subject Quiz still work, because they pick chunks without comparing vectors.
 5. Go into a subject and upload a small PNG or a one-page PDF. The status moves from processing to Ready — tens of seconds on cloud, a minute or two per page on `local`.
 6. Open that material, answer a question and submit. Grading works, and search finds the notes.
 7. Optional: `npm test` in `web`. The tests use temporary data and call neither Bailian nor Ollama.
 
 ## 6. How it works
 
-- Uploads return immediately and are processed in the background, one at a time: each PDF page is rendered to an image and transcribed, the text is split into chunks and embedded into LanceDB, then five questions are written. Interrupted jobs resume when the server restarts; failed ones can be retried from the subject page, and pages already transcribed are not redone.
+- Uploads return immediately and are processed in the background, one at a time: each PDF page is rendered to an image and transcribed, the text is split into chunks and embedded into LanceDB, then up to five questions are written. Interrupted jobs resume by themselves when the server restarts. **Retry** on the subject page re-transcribes the whole file, because a transcript is only saved once every page has succeeded; once the material is Ready, a retry reuses the transcript and only re-indexes and rewrites questions.
+- **Search** embeds your wording and returns the chunks nearest to it. Anything whose cosine distance is above 0.75 is treated as unrelated and dropped, so a question your notes do not answer comes back empty rather than guessed at. A snippet is shown with the workbook furniture removed (see the question writer below); the index itself keeps the transcript as written.
 - The **Level** selector picks the difficulty, from Hong Kong S1 (中一) to S6 (中六); the default is S3, stored in a browser cookie. Practice questions, Quick Quiz and grading all follow the current level. Questions are cached per material and level: S3 questions are written during upload, other levels the first time you practise at that level.
-- Each subject page has a **Subject Quiz**: five random questions from that subject's notes at the current level. A subject with no notes yet gets five questions from general subject knowledge (Hong Kong curriculum) instead, marked "General knowledge".
-- **Mistakes**: every answer scoring below 60 (in practice, Quick Quiz or a subject quiz) is saved to the mistake log. The Mistakes page lists them with your answer, the feedback and the reference answer, and can start review rounds of five, optionally for one subject. A question later answered with 60 or more is marked mastered; mistakes can also be removed by hand.
+- The question writer sets new problems: it uses the formulas and methods in your notes but invents its own numbers, names and context, so a question never repeats one you have already seen, and each reference answer is numbered working steps ending in a final answer. Arithmetic in an answer key is checked on your machine before the question is kept, and workbook furniture in a transcript (course headers, page marks, empty question numbers, the transcriber's own comments) is ignored. Seven drafts are asked for so that a key failing a check costs one question, not the set; the first five that pass become the questions. Question files are versioned, so sets written by an older prompt count as stale and are rewritten the next time you open that material and level - no re-upload, no index rebuild. On the `local` profile the small model often cannot produce checkable arithmetic, so expect the prose-only fallback there more often.
+- Each subject page has a **Subject Quiz**: five random questions from that subject's notes at the current level. Nothing is reused - the set is written fresh for every round, so expect about a minute on `cloud` and longer on `local`. A subject with no notes yet gets five questions from general subject knowledge (Hong Kong curriculum) instead, marked "General knowledge".
+- **Mistakes**: every answer scoring below 60 (in practice, Quick Quiz or a subject quiz) is saved to the mistake log. The Mistakes page lists them with your answer, the feedback and the reference answer, and can start review rounds of five, optionally for one subject. A logged question that still quotes your own notes is counted but skipped by a review round, because the writer will not re-ask it, and the card says so. A question later answered with 60 or more is marked mastered; mistakes can also be removed by hand. Deleting a subject also deletes the mistake entries built from its notes.
 - Data layout under `DATA_DIR`:
 
 ```
 subjects/<subject>/subject.json
 subjects/<subject>/materials/<id>/original.*, meta.json, extract.md, questions-<level>.json
 attempts/<id>.json      graded answers (practice and Quick Quiz)
-quizzes/<id>.json       Quick Quiz, subject quiz and review sessions
+quizzes/<id>.json       Quick Quiz, subject quiz and review sessions (one a day old is deleted when the next quiz starts)
 mistakes/<id>.json      mistake log, one file per question
 rag/                    LanceDB index and index.json (embedding model and dimension)
 ```
@@ -372,7 +374,7 @@ rag/                    LanceDB index and index.json (embedding model and dimens
 
 **Port in use.** Another CogniGuide or app holds 3000; stop it first. macOS / Ubuntu: `lsof -iTCP:3000 -sTCP:LISTEN`. Windows PowerShell: `Get-NetTCPConnection -LocalPort 3000 -State Listen`.
 
-**"API key is missing" on the home page.** `DASHSCOPE_API_KEY` is empty in `.env.local` and no profile supplies one, or the server started before you saved the file. Save and restart.
+**"DASHSCOPE_API_KEY is not set." on the home page.** `DASHSCOPE_API_KEY` is empty in `.env.local` and no profile supplies one, or the server started before you saved the file. Save and restart. With `MODEL_PROFILE=local` this banner cannot appear, because `web/profiles/local.env` supplies the placeholder key - if you see it while meaning to run locally, `MODEL_PROFILE` is empty and the server is reading `.env.local` only.
 
 **Startup error naming `MODEL_PROFILE`.** The value must match a file in `web/profiles/` exactly (`cloud` or `local`). The server refuses to start rather than silently falling back to the other source.
 
@@ -382,7 +384,11 @@ rag/                    LanceDB index and index.json (embedding model and dimens
 
 **"Model not exist" with `cloud`.** Keep `VISION_MODEL=qwen3-vl-plus`; `qwen-vl-max` is unavailable on the current Bailian endpoint. A key from a different region than `DASHSCOPE_BASE_URL` also produces model or auth errors.
 
-**Upload stuck processing, or failed.** Read the error shown on the material. PDFs over 50 pages, files over 25 MB, encrypted files, and images with no readable study content all fail. After a network or model interruption, click Retry on the subject page; transcribed text is not re-recognised.
+**Upload stuck processing, or failed.** Read the error shown on the material. PDFs over 50 pages, files over 25 MB, encrypted files, and images with no readable study content all fail. An upload interrupted by a restart resumes from the queue by itself. **Retry** re-recognises every page, because a transcript is saved only once the whole file has succeeded - so a 30-page PDF that failed on page 29 is transcribed again from page 1.
+
+**"These questions have been rewritten for this level. Reload the page to answer the new set."** The practice page was open while its questions were regenerated, so the answers you are about to submit would be graded against the wrong key. Reload and answer the set now on the page; the attempt that was refused was not recorded.
+
+**"This quiz has expired. Start a new one."** A quiz is meant to be answered the day it starts; a session older than a day is deleted when the next quiz begins. Start a new quiz.
 
 **Search stopped working after changing `EMBEDDING_MODEL`.** Expected. The home page asks for a rebuild — press **Rebuild index**. Transcripts and questions are reused.
 

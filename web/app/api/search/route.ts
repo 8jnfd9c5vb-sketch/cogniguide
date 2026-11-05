@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { cleanChunkText } from "@/lib/clean";
 import { handle } from "@/lib/http";
 import { search } from "@/lib/rag";
 import { isValidSlug } from "@/lib/storage";
@@ -8,6 +9,7 @@ export async function GET(req: NextRequest) {
     const q = req.nextUrl.searchParams.get("q")?.slice(0, 500) ?? "";
     const subject = req.nextUrl.searchParams.get("subject") ?? "";
     const hits = await search(q, { subject: isValidSlug(subject) ? subject : undefined, limit: 8 });
-    return { hits };
+    // The index keeps the transcript as written, so the workbook header lines are stripped only here.
+    return { hits: hits.map((h) => ({ ...h, text: cleanChunkText(h.text) })) };
   });
 }

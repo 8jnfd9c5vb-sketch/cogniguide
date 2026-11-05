@@ -59,31 +59,55 @@ export async function embed(texts: string[]): Promise<number[][]> {
   return out;
 }
 
+export interface ChatJsonOptions {
+  /** Defaults to 2: one try, one retry. */
+  attempts?: number;
+  /** Only sent when set, so existing callers keep the provider default. */
+  maxTokens?: number;
+  /**
+   * Turns a rejection into the feedback the retry is sent with. Without it a model that produced
+   * well-formed but non-compliant JSON is asked for the same thing again and usually repeats itself.
+   */
+  feedback?: (err: Error, attempt: number) => string;
+}
+
 /**
- * Asks the chat model for a JSON object. Retries once when the reply
- * is not parseable or fails validation.
+ * Asks the chat model for a JSON object. Retries when the reply is not parseable or fails
+ * validation, and on a retry tells the model why the previous reply was rejected.
  */
 export async function chatJson<T>(
   system: string,
   user: string,
-  validate: (value: unknown) => T,
+  validate: (value: unknown, attempt: number) => T,
+  opts: ChatJsonOptions = {},
 ): Promise<T> {
+  const attempts = opts.attempts ?? 2;
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const res = await getClient().chat.completions.create({
       model: config.chatModel,
       response_format: { type: "json_object" },
       temperature: attempt === 0 ? 0.4 : 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+      messages,
     });
     const raw = res.choices[0]?.message?.content ?? "";
     try {
-      return validate(JSON.parse(extractJson(raw)));
+      return validate(JSON.parse(extractJson(raw)), attempt);
     } catch (err) {
       lastError = err;
+      const reason = err instanceof Error ? err.message : String(err);
+      messages.push({ role: "assistant", content: raw });
+      messages.push({
+        role: "user",
+        content:
+          opts.feedback?.(err instanceof Error ? err : new Error(reason), attempt) ??
+          `That reply was rejected: ${reason}. Send a JSON object that follows the required shape exactly.`,
+      });
     }
   }
   throw new Error(`The model did not return valid JSON: ${(lastError as Error)?.message ?? lastError}`);

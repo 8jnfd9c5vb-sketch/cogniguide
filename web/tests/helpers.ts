@@ -1,5 +1,30 @@
 import type { Chunk, Question } from "@/lib/types";
 
+/** A reply item that passes every generation rule, so tests only override what they are about. */
+export function makeGeneratedItem(
+  overrides: Partial<{
+    question: string;
+    referenceAnswer: string;
+    evidence: string;
+    checks: string[];
+    chunkIds: string[];
+  }> = {},
+) {
+  return {
+    question: "A right triangle has legs of 5 cm and 12 cm. Find the length of the hypotenuse.",
+    referenceAnswer: [
+      "1. Square each leg: 25 and 144.",
+      "2. Add the squares: 169.",
+      "3. Take the square root.",
+      "Answer: 13 cm",
+    ].join("\n"),
+    evidence: "Pythagoras: the square on the hypotenuse equals the sum of the squares on the legs.",
+    checks: ["5^2 + 12^2 = 169", "sqrt(169) = 13"],
+    chunkIds: ["mat1-0"],
+    ...overrides,
+  };
+}
+
 export function makeChunk(overrides: Partial<Chunk> = {}): Chunk {
   return {
     id: "mat1-0",

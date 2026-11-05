@@ -1,0 +1,7 @@
+node_modules/
+data/
+web/.env.local
+web/.next/
+datasets/**/.cache/
+.DS_Store
+

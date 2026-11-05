@@ -1,0 +1,28 @@
+# systemd user service for running CogniGuide on this machine only.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp deploy/cogniguide.service ~/.config/systemd/user/
+#   # edit WorkingDirectory below if the project is not in ~/CogniGuide
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now cogniguide
+#   loginctl enable-linger "$USER"   # optional: start at boot without logging in
+#
+# Logs: journalctl --user -u cogniguide -f
+
+[Unit]
+Description=CogniGuide study site (local only)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/CogniGuide/web
+# npm run start binds to 127.0.0.1:3000 and reads web/.env.local.
+# If Node was installed with nvm, replace this with the absolute path from `which npm`.
+ExecStart=/usr/bin/env npm run start
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

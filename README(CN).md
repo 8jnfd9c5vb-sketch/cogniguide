@@ -13,6 +13,7 @@
   - **cloud**：一个百炼 / DashScope API Key，并且这台机器能访问 `dashscope.aliyuncs.com`。
   - **local**：同一台机器装 Ollama 并拉好三个模型（合计下载约 6.4 GB），全程离线可用。
 - 给 `DATA_DIR` 留出磁盘空间。上传的文件原样保存，另外还有转写文本、题目、作答和向量索引。
+- 除此之外不需要别的东西。仓库里还附带了现成的学习资料，方便你先试一次上传再用自己的笔记：`math/`（24 张手写数学页的照片，每张 4–5 MB）和 `datasets/English-Handwritten-Math-Notes-Dataset/`（100 个单页 PDF，CC-BY-4.0），第 5 节就用这些文件。`poster/` 和 `Project_Description.md` 是展示用的材料，程序不会读取。
 
 `npm ci` 必须在将来运行本站点的电脑上执行。LanceDB 和画布库带的是各平台自己的原生二进制，**不要把一台电脑的 `node_modules`（或 `.next`）拷到另一台**，也不要在 Apple 芯片和 Intel Mac 之间互拷。
 
@@ -136,6 +137,14 @@ DATA_DIR=/home/me/cogniguide-data
 第一次启动会创建四个学科：Chinese、English、Math、Geography。中文学科的题目和反馈是中文，其余是英文。新建学科时在创建的那一刻选好语言。
 
 ## 4. 安装并启动
+
+如果这台机器上还没有项目，先把它取下来。仓库是公开的，因为附带了上面那些示例资料，下载约有 130 MB：
+
+```bash
+git clone https://github.com/8jnfd9c5vb-sketch/cogniguide.git
+```
+
+在仓库页面下载 ZIP 也一样。两种方式都不含学习数据：`web/data` 没有提交到仓库，全新的副本只有四个默认学科，没有资料。
 
 ### 4.1 macOS
 
@@ -347,18 +356,19 @@ systemctl --user disable --now cogniguide
 2. 检查表头下面那一行模型信息：显示当前 profile、接口地址和三个模型名。`MODEL_PROFILE=local` 时应该是 `http://127.0.0.1:11434/v1`、`qwen2.5vl:3b`、`qwen3:4b-instruct-2507-q4_K_M`、`bge-m3`。
 3. 首页不该有琥珀色的 "DASHSCOPE_API_KEY is not set."。如果有，说明 `.env.local` 没填密钥（cloud），或者服务是在保存之前启动的。用 `MODEL_PROFILE=local` 时，让这条提示消失的是 `web/profiles/local.env` 里的占位密钥。
 4. **刚切换过 profile 的话**，首页会出现一条琥珀色提示，说明索引是另一个向量模型建的。点 **Rebuild index** 并等它跑完；在此之前，搜索、带主题的随堂测验以及新上传资料的向量化都会回答 "The search index was built with ... Rebuild the index from the home page first."。随机随堂测验和 Subject Quiz 仍可正常使用，因为它们随机抽样，不比较向量。
-5. 进入一个学科，上传一张小的 PNG 或一页 PDF，状态会从处理中变成 Ready。云端通常几十秒，`local` 每页要一两分钟。
+5. 进入一个学科，上传一个小文件。仓库里有现成的例子：`math/Image_20261104204427_143_128.jpg`（一页手写数学）或 `datasets/English-Handwritten-Math-Notes-Dataset/linear-algebra-kalika102pages-3.pdf`（单页 PDF）。状态会从处理中变成 Ready。云端通常几十秒，`local` 每页要一两分钟。
 6. 打开该资料，答一题并提交：评分能用，搜索也能搜到笔记内容。
 7. 可选：在 `web` 目录执行 `npm test`。测试用临时数据，既不调百炼也不调 Ollama，也不读 `DATA_DIR` 里的真实资料。
 
 ## 6. 工作原理
 
-- 上传后立即返回，后台一次处理一个：PDF 每页渲染成图片识别，文本切块并嵌入 LanceDB，然后写出最多五道题。服务重启时，被打断的任务会自己回到队列继续。学科页的 **Retry** 会重新识别整个文件，因为每一页都成功后转写稿才会落盘；资料一旦 Ready，Retry 就沿用已有的转写稿，只重新索引和重新出题。
+- 上传支持 PDF、PNG、JPG/JPEG 和 WEBP。提交后立刻返回，后台一次处理一个文件：PDF 每页渲染成图片识别，文本切块并嵌入 LanceDB，然后写出最多五道题。凡是注定会被模型卡住的情况都在选文件这一步就拒绝，不会排到后台：类型不对、空文件、超过 `MAX_UPLOAD_MB`、页数超过 `MAX_PDF_PAGES`，以及加密或损坏的 PDF。服务重启时，被打断的任务会自己回到队列继续。学科页的 **Retry** 会重新识别整个文件，因为每一页都成功后转写稿才会落盘；资料一旦 Ready，Retry 就沿用已有的转写稿，只重新索引和重新出题。
 - **搜索**：把提问转成向量，返回最接近的切块。余弦距离大于 0.75 的切块视为无关并丢弃，所以笔记里没有答案的问题会返回空，而不是硬凑一个。显示的片段会去掉下面说的工作纸杂项，但索引里存的仍是转写原文。
+- 首页的 **Quick Quiz（随堂测验）** 固定五道题。主题留空时，它从所有学科随机抽十个切块，再把五题分配到这些学科，所以只要索引里有资料就能用。填了主题就改成先搜索一次，因此需要索引是最新的：内容不够接近时回答 *"None of your notes match "…". Try another topic or leave it empty for a random quiz."*，一份资料都没索引过时回答 *"There is no indexed material yet. Upload notes to a subject first."*
 - 表头的 **Level** 决定难度，从香港 S1（中一）到 S6（中六），默认 S3，存在浏览器 cookie 里。练习题、随堂测验和评分都按当前 Level。题目按学科 + 资料 + Level 缓存：S3 的题在上传时就写好，其他 Level 第一次练习时现写。
 - 出题器写的是新题：只借用笔记里的公式和方法，数字、名称和情境都另拟，所以不会照抄你已做过的题；参考答案是分编号的解题步骤，最后一行给出最终答案。答案里的算术先在本机校验，通不过就不采用；转录文字里与工作纸无关的内容（课程表头、页码、空题号、转录者的旁白）会被忽略。出题时会多要两份草稿（共七题），这样某份答案通不过校验只少一道题，不至于整组作废，最终取通过校验的前五题。题目文件带有版本号，旧版本写的题视为过期，下次打开这份资料对应的 Level 时自动重写——不用重新上传，也不用重建索引。改用 `local` 时，小模型往往写不出能通过校验的算术，因此那里更常退化成只给文字说明的答案。
 - 每个学科页有 **Subject Quiz**：按当前 Level 从该学科的笔记里随机取样，写出五道新题。每一轮都是重新写的，不会复用旧题，因此云端大约要等一分钟，`local` 更久。学科还没有资料时，改为按香港课程的一般学科常识出五题，并标注 "General knowledge"。
-- **错题（Mistakes）**：练习、随堂测验或学科测验里低于 60 分的作答都会进错题本。错题页列出你的答案、反馈和参考答案，可以发起一轮五题的复习，也可以只复习一个学科。仍在直接引用你笔记原文的那道错题会列在页面上，但复习轮会跳过它（出题器不会重考原题），卡片上会说明。同一题后来答到 60 分及以上就标记为已掌握，错题也可以手动删除。删除学科时，由该学科笔记产生的错题记录也一并删除。
+- **错题（Mistakes）**：练习、随堂测验或学科测验里低于 60 分的作答都会进错题本。错题页列出你的答案、反馈和参考答案，可以发起一轮五题的复习，也可以只复习一个学科。仍在直接引用你笔记原文的那道错题会列在页面上，但复习轮会跳过它（出题器不会重考原题），卡片上会说明。同一题后来答到 60 分及以上就标记为已掌握，错题也可以手动删除。删除学科时，由该学科笔记产生的错题记录也一并删除；只删除某一份资料时，它留下的错题仍然留在错题本里——每条记录都自带题目和参考答案的副本，所以两种情况下都能正常显示。
 - `DATA_DIR` 里的目录结构：
 
 ```
@@ -384,7 +394,9 @@ rag/                    LanceDB 索引和 index.json（记录向量模型和维�
 
 **用 `cloud` 时报模型不存在。** `VISION_MODEL` 保持 `qwen3-vl-plus`，`qwen-vl-max` 在当前百炼接口上不可用。密钥区域和 `DASHSCOPE_BASE_URL` 不一致时，也会报模型或鉴权错误。
 
-**上传后一直处理中或失败。** 看该资料上的错误文字。PDF 超过 50 页、文件超过 25 MB、文件加密，或图片里没有可识别的学习内容，都会失败。被重启打断的上传会自己回到队列继续。**Retry** 会重新识别每一页，因为整份文件全部成功后转写稿才会保存——也就是说 30 页的 PDF 在第 29 页失败后，重试是从第 1 页重新识别。资料一旦 Ready，Retry 便沿用转写稿，只重建索引和题目。
+**选完文件就被拒绝。** 页面上直接写明原因：*"Only PDF, PNG, JPG and WEBP files are supported."*、*"File is empty."*、*"File is larger than 25 MB."*、*"This PDF has 130 pages; the limit is 50. Split it into smaller files."*、*"This PDF could not be opened. It may be damaged or password-protected."*（把照片改名成 `.pdf` 就是这句），以及 *"DASHSCOPE_API_KEY is not set. Add it to web/.env.local and restart the server."*。这些情况下什么都不会保存，也不会排进队列。
+
+**上传后一直处理中或失败。** 看该资料上的错误文字。能被接受但读不出内容的情况发生在这一步：扫描太淡、图片里没有可识别的学习内容，识别会失败。被重启打断的上传会自己回到队列继续。**Retry** 会重新识别每一页，因为整份文件全部成功后转写稿才会保存——也就是说 30 页的 PDF 在第 29 页失败后，重试是从第 1 页重新识别。资料一旦 Ready，Retry 便沿用转写稿，只重建索引和题目。
 
 **"These questions have been rewritten for this level. Reload the page to answer the new set."** 练习页还开着，而这一组题已被重写，按旧的题目 id 提交会全部评到错误的答案上。刷新页面做现在显示的那一组即可；被拒绝的那次作答没有记录。
 

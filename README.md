@@ -13,6 +13,7 @@ The Chinese version of this guide is [README(CN).md](<README(CN).md>).
   - **cloud** — a Bailian / DashScope API key, and access to `dashscope.aliyuncs.com`.
   - **local** — Ollama on the same machine with three models pulled (~6.4 GB download). Works fully offline.
 - Disk space for `DATA_DIR`: originals are stored as uploaded, plus transcripts, questions, answers and the vector index.
+- Nothing else. The repository also ships ready-made study material so you can test an upload before using your own: `math/` (24 photos of handwritten maths pages, 4–5 MB each) and `datasets/English-Handwritten-Math-Notes-Dataset/` (100 one-page PDFs, CC-BY-4.0). §5 uses them. `poster/` and `Project_Description.md` are presentation material; the app never reads them.
 
 Run `npm ci` on the machine that will run the site. LanceDB and the canvas library ship native binaries per platform, so do not copy `node_modules` (or `.next`) between Windows, macOS and Linux, or between Apple-silicon and Intel Macs.
 
@@ -136,6 +137,14 @@ DATA_DIR=/home/me/cogniguide-data
 The first start creates four subjects: Chinese, English, Math, Geography. Chinese questions and feedback are in Chinese; every other subject uses English. New subjects pick their language when created.
 
 ## 4. Install and start
+
+If the project is not on this machine yet, get it first — the download is about 130 MB because of the sample notes above:
+
+```bash
+git clone https://github.com/8jnfd9c5vb-sketch/cogniguide.git
+```
+
+Downloading the ZIP from the repository page works too. Neither brings any study data: `web/data` is not in the repository, so a fresh copy starts with the four default subjects and no materials.
 
 ### 4.1 macOS
 
@@ -347,18 +356,19 @@ After editing `.env.local` or rebuilding, run `systemctl --user restart cognigui
 2. Check the model line under the header. It shows the active profile, endpoint and the three model names. With `MODEL_PROFILE=local` it must read `http://127.0.0.1:11434/v1`, `qwen2.5vl:3b`, `qwen3:4b-instruct-2507-q4_K_M`, `bge-m3`.
 3. There should be no amber banner reading **"DASHSCOPE_API_KEY is not set."** If there is, `.env.local` has no key (cloud) or the service started before you saved it. With `MODEL_PROFILE=local` the placeholder key in `web/profiles/local.env` is what clears it.
 4. **Right after switching profiles**, the home page shows an amber notice that the index was built with the other embedding model. Click **Rebuild index** and wait for it to finish. Until you do, search, a topic-focused Quick Quiz and the indexing step of a new upload answer *"The search index was built with ... Rebuild the index from the home page first."* A random Quick Quiz and a Subject Quiz still work, because they pick chunks without comparing vectors.
-5. Go into a subject and upload a small PNG or a one-page PDF. The status moves from processing to Ready — tens of seconds on cloud, a minute or two per page on `local`.
+5. Go into a subject and upload one small file. The repository has examples: `math/Image_20261104204427_143_128.jpg` (a page of handwritten maths) or `datasets/English-Handwritten-Math-Notes-Dataset/linear-algebra-kalika102pages-3.pdf` (one page). The status moves from processing to Ready — tens of seconds on cloud, a minute or two per page on `local`.
 6. Open that material, answer a question and submit. Grading works, and search finds the notes.
 7. Optional: `npm test` in `web`. The tests use temporary data and call neither Bailian nor Ollama.
 
 ## 6. How it works
 
-- Uploads return immediately and are processed in the background, one at a time: each PDF page is rendered to an image and transcribed, the text is split into chunks and embedded into LanceDB, then up to five questions are written. Interrupted jobs resume by themselves when the server restarts. **Retry** on the subject page re-transcribes the whole file, because a transcript is only saved once every page has succeeded; once the material is Ready, a retry reuses the transcript and only re-indexes and rewrites questions.
+- Uploads accept PDF, PNG, JPG/JPEG and WEBP, and return immediately; processing runs in the background, one file at a time: each PDF page is rendered to an image and transcribed, the text is split into chunks and embedded into LanceDB, then up to five questions are written. Anything the model would only fail on later is refused at the form instead — wrong type, empty file, over `MAX_UPLOAD_MB`, over `MAX_PDF_PAGES` pages, and password-protected or damaged PDFs. Interrupted jobs resume by themselves when the server restarts. **Retry** on the subject page re-transcribes the whole file, because a transcript is only saved once every page has succeeded; once the material is Ready, a retry reuses the transcript and only re-indexes and rewrites questions.
 - **Search** embeds your wording and returns the chunks nearest to it. Anything whose cosine distance is above 0.75 is treated as unrelated and dropped, so a question your notes do not answer comes back empty rather than guessed at. A snippet is shown with the workbook furniture removed (see the question writer below); the index itself keeps the transcript as written.
+- **Quick Quiz** on the home page asks five questions. Left blank it samples ten chunks at random across all subjects and shares the five between them, so it works as soon as anything is indexed. Typing a topic makes it a search first, which means it needs an up-to-date index and answers *"None of your notes match "…". Try another topic or leave it empty for a random quiz."* when nothing is close enough; with nothing indexed at all it says *"There is no indexed material yet. Upload notes to a subject first."*
 - The **Level** selector picks the difficulty, from Hong Kong S1 (中一) to S6 (中六); the default is S3, stored in a browser cookie. Practice questions, Quick Quiz and grading all follow the current level. Questions are cached per material and level: S3 questions are written during upload, other levels the first time you practise at that level.
 - The question writer sets new problems: it uses the formulas and methods in your notes but invents its own numbers, names and context, so a question never repeats one you have already seen, and each reference answer is numbered working steps ending in a final answer. Arithmetic in an answer key is checked on your machine before the question is kept, and workbook furniture in a transcript (course headers, page marks, empty question numbers, the transcriber's own comments) is ignored. Seven drafts are asked for so that a key failing a check costs one question, not the set; the first five that pass become the questions. Question files are versioned, so sets written by an older prompt count as stale and are rewritten the next time you open that material and level - no re-upload, no index rebuild. On the `local` profile the small model often cannot produce checkable arithmetic, so expect the prose-only fallback there more often.
 - Each subject page has a **Subject Quiz**: five random questions from that subject's notes at the current level. Nothing is reused - the set is written fresh for every round, so expect about a minute on `cloud` and longer on `local`. A subject with no notes yet gets five questions from general subject knowledge (Hong Kong curriculum) instead, marked "General knowledge".
-- **Mistakes**: every answer scoring below 60 (in practice, Quick Quiz or a subject quiz) is saved to the mistake log. The Mistakes page lists them with your answer, the feedback and the reference answer, and can start review rounds of five, optionally for one subject. A logged question that still quotes your own notes is counted but skipped by a review round, because the writer will not re-ask it, and the card says so. A question later answered with 60 or more is marked mastered; mistakes can also be removed by hand. Deleting a subject also deletes the mistake entries built from its notes.
+- **Mistakes**: every answer scoring below 60 (in practice, Quick Quiz or a subject quiz) is saved to the mistake log. The Mistakes page lists them with your answer, the feedback and the reference answer, and can start review rounds of five, optionally for one subject. A logged question that still quotes your own notes is counted but skipped by a review round, because the writer will not re-ask it, and the card says so. A question later answered with 60 or more is marked mastered; mistakes can also be removed by hand. Deleting a subject also deletes the mistake entries built from its notes, while deleting a single material leaves its mistakes in the log — an entry keeps its own copy of the question and the reference answer, so it stays readable either way.
 - Data layout under `DATA_DIR`:
 
 ```
@@ -384,7 +394,9 @@ rag/                    LanceDB index and index.json (embedding model and dimens
 
 **"Model not exist" with `cloud`.** Keep `VISION_MODEL=qwen3-vl-plus`; `qwen-vl-max` is unavailable on the current Bailian endpoint. A key from a different region than `DASHSCOPE_BASE_URL` also produces model or auth errors.
 
-**Upload stuck processing, or failed.** Read the error shown on the material. PDFs over 50 pages, files over 25 MB, encrypted files, and images with no readable study content all fail. An upload interrupted by a restart resumes from the queue by itself. **Retry** re-recognises every page, because a transcript is saved only once the whole file has succeeded - so a 30-page PDF that failed on page 29 is transcribed again from page 1.
+**Upload refused as soon as you pick the file.** The reason appears on the page: *"Only PDF, PNG, JPG and WEBP files are supported."*, *"File is empty."*, *"File is larger than 25 MB."*, *"This PDF has 130 pages; the limit is 50. Split it into smaller files."*, *"This PDF could not be opened. It may be damaged or password-protected."* — renaming a photo to `.pdf` lands you here — and *"DASHSCOPE_API_KEY is not set. Add it to web/.env.local and restart the server."* Nothing is saved or queued in these cases.
+
+**Upload stuck processing, or failed.** Read the error shown on the material. A page the vision model cannot read — a scan that is too faint, or an image with no study content in it — fails here, after the file was accepted. An upload interrupted by a restart resumes from the queue by itself. **Retry** re-recognises every page, because a transcript is saved only once the whole file has succeeded - so a 30-page PDF that failed on page 29 is transcribed again from page 1.
 
 **"These questions have been rewritten for this level. Reload the page to answer the new set."** The practice page was open while its questions were regenerated, so the answers you are about to submit would be graded against the wrong key. Reload and answer the set now on the page; the attempt that was refused was not recorded.
 
